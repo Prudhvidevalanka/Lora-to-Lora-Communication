@@ -1,1 +1,3 @@
 # Lora-to-Lora-Communication
+This project involves implementing a LoRa-to-LoRa communication system designed for environmental monitoring. The system consists of two slave devices and a master device, all using LoRa technology for communication. The slave devices are deployed in different locations to monitor environmental parameters, including readings from sensors like MQ135, MQ136, and MQ137. These parameters are then displayed on an OLED screen and transmitted to the master device. The master device consolidates data from both slaves, displays the collected information on its OLED screen, and uploads it to the ThingSpeak cloud for further analysis or visualization.
+
