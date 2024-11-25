@@ -1,0 +1,142 @@
+#include <WiFi.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <SPI.h>
+#include <LoRa.h>
+//slave 2
+// LoRa Configuration
+#define LORA_SS 5  // LoRa SS pin
+#define LORA_RST 14 // LoRa reset pin
+#define LORA_DIO0 2 // LoRa DIO0 pin
+
+// OLED Display
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// BME280 Sensor
+Adafruit_BME280 bme;
+#define SEALEVELPRESSURE_HPA (1013.25)
+
+// MQ Sensors
+const int MQ135_SENSOR_PIN = 32;
+const int MQ136 = 33;
+const int MQ137 = 34;
+#define RL 47
+#define m -0.263
+#define b 0.42
+#define Ro 20.0 // Calibrated Ro value for MQ137
+
+void setup() {
+    Serial.begin(115200);
+
+    // Initialize BME280
+    if (!bme.begin(0x76)) {
+        Serial.println("Could not find a valid BME280 sensor, check wiring!");
+        while (1);
+    }
+
+    // Initialize OLED
+    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+        Serial.println("SSD1306 allocation failed");
+        while (1);
+    }
+    display.clearDisplay();
+
+    // Initialize LoRa
+    LoRa.setPins(LORA_SS, LORA_RST, LORA_DIO0);
+    if (!LoRa.begin(433E6)) { // Set frequency to 433 MHz
+        Serial.println("Starting LoRa failed!");
+        while (1);
+    }
+    Serial.println("LoRa initialized!");
+}
+
+void loop() {
+    // Read sensor values
+    float temperature = bme.readTemperature();
+    float pressure = bme.readPressure() / 100.0F;
+    float altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+    int mq135Value = analogRead(MQ135_SENSOR_PIN);
+    float mq136Value = calculateMQ136();
+    float mq137Value = calculateMQ137();
+
+    // Prepare data string with Slave 2 identifier
+    String data = "S2:" + String(temperature) + "," +
+                  String(pressure) + "," +
+                  String(altitude) + "," +
+                  String(mq135Value) + "," +
+                  String(mq136Value) + "," +
+                  String(mq137Value);
+
+    // Send data via LoRa
+    Serial.print("Sending data: ");
+    Serial.println(data);
+    LoRa.beginPacket();
+    LoRa.print(data);
+    LoRa.endPacket();
+
+    // Display data on OLED
+    displayData(temperature, pressure, altitude, mq135Value, mq136Value, mq137Value);
+
+    delay(15000); // Send data every 15 seconds
+}
+
+float calculateMQ136() {
+    int sensorValue = analogRead(MQ136);
+    float h2sConcentration = -329.0f + 1.47f * sensorValue - 0.00218f * pow(sensorValue, 2) + 0.00000108f * pow(sensorValue, 3);
+    return h2sConcentration / 250.0f;
+}
+
+float calculateMQ137() {
+    float VRL = analogRead(MQ137) * (5.0 / 4096.0);
+    float Rs = ((5.0 * RL) / VRL) - RL;
+    float ratio = Rs / Ro;
+    float ppm = pow(10, ((log10(ratio) - b) / m));
+    return ppm;
+}
+
+void displayData(float temp, float pressure, float altitude, int mq135, float mq136, float mq137) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+
+    
+
+    display.setCursor(0, 0);
+    display.print("slave 2 ");
+    display.print("Temp: ");
+    display.print(temp);
+    display.println(" C");
+
+    display.setCursor(0, 10);
+    display.print("Pressure: ");
+    display.print(pressure);
+    display.println(" kPa");
+
+    display.setCursor(0, 20);
+    display.print("Altitude: ");
+    display.print(altitude);
+    display.println(" m");
+
+    display.setCursor(0, 30);
+    display.print("MQ135: ");
+    display.print(mq135);
+    display.println(" ppm");
+
+    display.setCursor(0, 40);
+    display.print("H2S (MQ136): ");
+    display.print(mq136);
+    display.println(" ppm");
+
+    display.setCursor(0, 50);
+    display.print("NH3 (MQ137): ");
+    display.print(mq137);
+    display.println(" ppm");
+
+    display.display();
+}
